@@ -226,16 +226,16 @@
         let isSeeking = false;
 
         // Ganancia maestra
-        const gainPercussion = new Tone.Gain(initialGain).toDestination();
-        const gainMelody = new Tone.Gain(initialGain).toDestination();
+        const gainPercussion = new Tone.Gain(-10).toDestination();
+        const gainMelody = new Tone.Gain(-30).toDestination();
 
         // Ganancias individuales
         const individualGains = {
-            'vis-kick': new Tone.Gain(initialGain),
-            'vis-tar': new Tone.Gain(initialGain),
-            'vis-crash': new Tone.Gain(initialGain),
-            'vis-ton': new Tone.Gain(initialGain),
-            'vis-nap': new Tone.Gain(initialGain)
+            'vis-kick': new Tone.Gain(-10),
+            'vis-tar': new Tone.Gain(-10),
+            'vis-crash': new Tone.Gain(-10),
+            'vis-ton': new Tone.Gain(-10),
+            'vis-nap': new Tone.Gain(-10)
         };
 
         // Conectar: sampler → gain individual → gain general → destino
@@ -577,4 +577,5 @@
     </script>
 </body>
 </html>
+
 
