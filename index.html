@@ -184,33 +184,31 @@
             </div>
             <div class="control-row">
                 <label>Volumen Melodía</label>
-                <input type="range" id="volMelody" min="-30" max="10" value="0">
+                <input type="range" id="volMelody" min="-30" **max="0"** **value="-15"**>
             </div>
-            <!-- Volumen general de percusión -->
             <div class="control-row">
                 <label>Volumen Percusión</label>
-                <input type="range" id="volPercussion" min="-30" max="10" value="0">
+                <input type="range" id="volPercussion" min="-30" max="10" **value="-15"**>
             </div>
-            <!-- Volúmenes individuales -->
             <div class="control-row">
                 <label>Volumen Bombo</label>
-                <input type="range" id="vol-kick" min="-30" max="10" value="0">
+                <input type="range" id="vol-kick" min="-30" max="10" **value="-15"**>
             </div>
             <div class="control-row">
                 <label>Volumen Tarola</label>
-                <input type="range" id="vol-tar" min="-30" max="10" value="0">
+                <input type="range" id="vol-tar" min="-30" max="10" **value="-15"**>
             </div>
             <div class="control-row">
                 <label>Volumen Platillo</label>
-                <input type="range" id="vol-crash" min="-30" max="10" value="0">
+                <input type="range" id="vol-crash" min="-30" max="10" **value="-15"**>
             </div>
             <div class="control-row">
                 <label>Volumen Tambor</label>
-                <input type="range" id="vol-ton" min="-30" max="10" value="0">
+                <input type="range" id="vol-ton" min="-30" max="10" **value="-15"**>
             </div>
             <div class="control-row">
                 <label>Volumen Napoleón</label>
-                <input type="range" id="vol-nap" min="-30" max="10" value="0">
+                <input type="range" id="vol-nap" min="-30" max="10" **value="-15"**>
             </div>
             
         </div>
@@ -225,18 +223,24 @@
         let beatLoopId = null;
         let isSeeking = false;
 
-        // Ganancia maestra
-        const gainPercussion = new Tone.Gain(-10).toDestination();
-        const gainMelody = new Tone.Gain(-30).toDestination();
+        // --- INICIALIZACIÓN DE GANANCIA CORREGIDA ---
+        // Se inicializa en -15dB, sincronizado con el valor inicial de los sliders.
+        const initialDB = -15; 
+        const initialGain = Tone.dbToGain(initialDB); 
 
-        // Ganancias individuales
+        // Ganancia maestra
+        const gainPercussion = new Tone.Gain(initialGain).toDestination();
+        const gainMelody = new Tone.Gain(initialGain).toDestination();
+
+        // Ganancias individuales (también inicializadas a -15dB)
         const individualGains = {
-            'vis-kick': new Tone.Gain(-10),
-            'vis-tar': new Tone.Gain(-10),
-            'vis-crash': new Tone.Gain(-10),
-            'vis-ton': new Tone.Gain(-10),
-            'vis-nap': new Tone.Gain(-10)
+            'vis-kick': new Tone.Gain(initialGain),
+            'vis-tar': new Tone.Gain(initialGain),
+            'vis-crash': new Tone.Gain(initialGain),
+            'vis-ton': new Tone.Gain(initialGain),
+            'vis-nap': new Tone.Gain(initialGain)
         };
+        // --- FIN DE INICIALIZACIÓN DE GANANCIA CORREGIDA ---
 
         // Conectar: sampler → gain individual → gain general → destino
         const samplers = {
@@ -252,7 +256,7 @@
 
         // Sintetizador armónico para melodía
         const otrosSynth = new Tone.PolySynth({
-            maxPolyphony: 45,
+            maxPolyphony: 8, // OPTIMIZACIÓN CLAVE: Mantiene 8 voces para rendimiento móvil.
             voice: Tone.Synth,
             options: {
                 oscillator: { type: "sawtooth" },
@@ -577,5 +581,3 @@
     </script>
 </body>
 </html>
-
-
