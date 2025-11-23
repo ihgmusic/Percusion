@@ -3,9 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="mobile-web-app-capable" content="yes">
-    <title>🥁 Visor Rítmico - El Cóndor Pasa</title>
+    <title>🥁 Percusión - El Cóndor Pasa</title>
     
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.25/build/Midi.js"></script>
@@ -86,9 +84,9 @@
         }
 
         .controls { 
-            background: var(--color-panel); padding: 16px; border-radius: 12px; 
+            background: var(--color-panel); padding: 20px; border-radius: 12px; 
             max-width: 800px; margin: 0 auto; 
-            display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
         }
         .control-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
         .controls button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
@@ -104,8 +102,8 @@
         }
         input[type="range"]::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             border-radius: 50%;
             background: var(--accent-color);
             cursor: pointer;
@@ -133,7 +131,7 @@
     </div>
     
     <div id="main-content" style="opacity: 0;"> 
-        <h2>🥁 Visor Rítmico - El Cóndor Pasa</h2>
+        <h2>🥁 Percusión - El Cóndor Pasa</h2>
         <span id="status">Cargando guía MIDI...</span>
 
         <div class="main-grid">
@@ -185,40 +183,40 @@
                 <input type="range" id="bpmSlider" min="40" max="200" value="120">
             </div>
             <div class="control-row">
-                <label>Percusión (General)</label>
-                <input type="range" id="volPercussion" min="-30" max="10" value="-6">
+                <label>Volumen Melodía</label>
+                <input type="range" id="volMelody" min="-30" max="10" value="0">
+            </div>
+            <!-- Volumen general de percusión -->
+            <div class="control-row">
+                <label>Volumen Percusión</label>
+                <input type="range" id="volPercussion" min="-30" max="10" value="0">
+            </div>
+            <!-- Volúmenes individuales -->
+            <div class="control-row">
+                <label>Volumen Bombo</label>
+                <input type="range" id="vol-kick" min="-30" max="10" value="0">
             </div>
             <div class="control-row">
-                <label>Bombo</label>
-                <input type="range" id="vol-kick" min="-30" max="10" value="-6">
+                <label>Volumen Tarola</label>
+                <input type="range" id="vol-tar" min="-30" max="10" value="0">
             </div>
             <div class="control-row">
-                <label>Tarola</label>
-                <input type="range" id="vol-tar" min="-30" max="10" value="-6">
+                <label>Volumen Platillo</label>
+                <input type="range" id="vol-crash" min="-30" max="10" value="0">
             </div>
             <div class="control-row">
-                <label>Platillo</label>
-                <input type="range" id="vol-crash" min="-30" max="10" value="-6">
+                <label>Volumen Tambor</label>
+                <input type="range" id="vol-ton" min="-30" max="10" value="0">
             </div>
             <div class="control-row">
-                <label>Tambor</label>
-                <input type="range" id="vol-ton" min="-30" max="10" value="-6">
+                <label>Volumen Napoleón</label>
+                <input type="range" id="vol-nap" min="-30" max="10" value="0">
             </div>
-            <div class="control-row">
-                <label>Napoleón</label>
-                <input type="range" id="vol-nap" min="-30" max="10" value="-6">
-            </div>
-            <div class="control-row">
-                <label>Melodía</label>
-                <input type="range" id="volMelody" min="-30" max="10" value="-8">
-            </div>
+            
         </div>
     </div>
     
     <script>
-        // ✅ Limitador global para evitar saturación
-        const masterLimiter = new Tone.Limiter(-3).toDestination();
-
         let currentMidi = null;
         let instrumentoSeleccionado = null;
         let originalBpm = 120;
@@ -227,20 +225,20 @@
         let beatLoopId = null;
         let isSeeking = false;
 
-        // Ganancia maestra de grupos
-        const gainPercussion = new Tone.Gain(1).connect(masterLimiter);
-        const gainMelody = new Tone.Gain(1).connect(masterLimiter);
+        // Ganancia maestra
+        const gainPercussion = new Tone.Gain(0).toDestination();
+        const gainMelody = new Tone.Gain(0).toDestination();
 
         // Ganancias individuales
         const individualGains = {
-            'vis-kick': new Tone.Gain(1).connect(gainPercussion),
-            'vis-tar': new Tone.Gain(1).connect(gainPercussion),
-            'vis-crash': new Tone.Gain(1).connect(gainPercussion),
-            'vis-ton': new Tone.Gain(1).connect(gainPercussion),
-            'vis-nap': new Tone.Gain(1).connect(gainPercussion)
+            'vis-kick': new Tone.Gain(0),
+            'vis-tar': new Tone.Gain(0),
+            'vis-crash': new Tone.Gain(0),
+            'vis-ton': new Tone.Gain(0),
+            'vis-nap': new Tone.Gain(0)
         };
 
-        // Samplers conectados a sus ganancias individuales
+        // Conectar: sampler → gain individual → gain general → destino
         const samplers = {
             'vis-kick': new Tone.Sampler({ urls: { "C2": "sounds/kick.mp3" } }).connect(individualGains['vis-kick']),
             'vis-tar': new Tone.Sampler({ urls: { "D2": "sounds/tar.mp3" } }).connect(individualGains['vis-tar']),
@@ -249,13 +247,17 @@
             'vis-nap': new Tone.Sampler({ urls: { "A2": "sounds/nap.mp3" } }).connect(individualGains['vis-nap'])
         };
 
-        // ✅ Sintetizador optimizado para móviles
+        // Conectar ganancias individuales al grupo
+        Object.values(individualGains).forEach(g => g.connect(gainPercussion));
+
+        // Sintetizador armónico para melodía
         const otrosSynth = new Tone.PolySynth({
-            maxPolyphony: 32,
+            maxPolyphony: 45,
             voice: Tone.Synth,
             options: {
-                oscillator: { type: "sine" }, // más ligero
-                envelope: { attack: 0.02, decay: 0.2, sustain: 0.6, release: 0.8 }
+                oscillator: { type: "sawtooth" },
+                filter: { type: "lowpass", frequency: 2000, rolloff: -12 },
+                envelope: { attack: 0.02, decay: 0.25, sustain: 0.7, release: 1.0 }
             }
         }).connect(gainMelody);
 
@@ -283,6 +285,7 @@
         const volPercussionSlider = document.getElementById('volPercussion');
         const volMelodySlider = document.getElementById('volMelody');
 
+        // Asociar sliders individuales
         const volSliders = {
             'vis-kick': document.getElementById('vol-kick'),
             'vis-tar': document.getElementById('vol-tar'),
@@ -350,7 +353,7 @@
             if (!currentMidi) return;
 
             if (Tone.Transport.state !== 'stopped') {
-                statusElement.innerText = `Reproduciendo... | BPM: ${Math.round(Tone.Transport.bpm.value)} | Vol: OK`;
+                statusElement.innerText = `Reproduciendo... | BPM: ${Math.round(Tone.Transport.bpm.value)}`;
             }
 
             const secInScreen = 3;
@@ -554,7 +557,7 @@
             }
         });
 
-        // --- Volumen: todos conectados al sistema con limitador ---
+        // --- Controles de volumen ---
         volPercussionSlider.addEventListener('input', (e) => {
             gainPercussion.gain.value = Tone.dbToGain(parseFloat(e.target.value));
         });
@@ -563,6 +566,7 @@
             gainMelody.gain.value = Tone.dbToGain(parseFloat(e.target.value));
         });
 
+        // Sliders individuales
         Object.keys(volSliders).forEach(id => {
             volSliders[id].addEventListener('input', (e) => {
                 individualGains[id].gain.value = Tone.dbToGain(parseFloat(e.target.value));
