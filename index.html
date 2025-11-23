@@ -186,12 +186,10 @@
                 <label>Volumen Melodía</label>
                 <input type="range" id="volMelody" min="-30" max="10" value="0">
             </div>
-            <!-- Volumen general de percusión -->
             <div class="control-row">
                 <label>Volumen Percusión</label>
                 <input type="range" id="volPercussion" min="-30" max="10" value="0">
             </div>
-            <!-- Volúmenes individuales -->
             <div class="control-row">
                 <label>Volumen Bombo</label>
                 <input type="range" id="vol-kick" min="-30" max="10" value="0">
@@ -225,18 +223,23 @@
         let beatLoopId = null;
         let isSeeking = false;
 
-        // Ganancia maestra
-        const gainPercussion = new Tone.Gain(1).toDestination();
-        const gainMelody = new Tone.Gain(1).toDestination();
+        // --- INICIALIZACIÓN DE GANANCIA CORREGIDA ---
+        // Se inicializa en -10dB (0.316 en ganancia) para evitar la saturación.
+        const initialGain = Tone.dbToGain(-10); 
 
-        // Ganancias individuales
+        // Ganancia maestra
+        const gainPercussion = new Tone.Gain(initialGain).toDestination();
+        const gainMelody = new Tone.Gain(initialGain).toDestination();
+
+        // Ganancias individuales (también inicializadas a -10dB)
         const individualGains = {
-            'vis-kick': new Tone.Gain(1),
-            'vis-tar': new Tone.Gain(1),
-            'vis-crash': new Tone.Gain(1),
-            'vis-ton': new Tone.Gain(1),
-            'vis-nap': new Tone.Gain(1)
+            'vis-kick': new Tone.Gain(initialGain),
+            'vis-tar': new Tone.Gain(initialGain),
+            'vis-crash': new Tone.Gain(initialGain),
+            'vis-ton': new Tone.Gain(initialGain),
+            'vis-nap': new Tone.Gain(initialGain)
         };
+        // --- FIN DE INICIALIZACIÓN DE GANANCIA CORREGIDA ---
 
         // Conectar: sampler → gain individual → gain general → destino
         const samplers = {
@@ -252,7 +255,7 @@
 
         // Sintetizador armónico para melodía
         const otrosSynth = new Tone.PolySynth({
-            maxPolyphony: 64,
+            maxPolyphony: 8, // <-- OPTIMIZACIÓN CLAVE: Reduce de 64 a 8 voces para rendimiento móvil.
             voice: Tone.Synth,
             options: {
                 oscillator: { type: "sawtooth" },
