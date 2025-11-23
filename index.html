@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🥁 Percusión - El Cóndor Pasa</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.25/build/Midi.js"></script>
+
+    <style>
+        :root {
+            --color-bg: #1e1e1e;
+            --color-panel: #2d2d2d;
+            --accent-color: #00d2ff;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--color-bg);
+            color: white;
+            text-align: center;
+            padding: 10px;
+            margin: 0;
+        }
+
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.95); z-index: 1000;
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            font-size: 1.5rem;
+        }
+        .spinner {
+            border: 8px solid #333; border-top: 8px solid var(--accent-color);
+            border-radius: 50%; width: 60px; height: 60px; margin-top: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .main-grid {
+            display: grid; grid-template-columns: 1fr 200px; gap: 15px;
+            max-width: 1000px; margin: 0 auto; align-items: start;
+        }
+        @media (max-width: 768px) { .main-grid { grid-template-columns: 1fr; } }
+
+        .metro-panel {
+            background: #111; border: 2px solid #555; border-radius: 10px; padding: 15px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            height: 150px; box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+        .metro-label { font-size: 0.8rem; color: #aaa; }
+        .metro-big-number { font-size: 3rem; font-weight: bold; color: white; transition: color 0.1s; }
+        .metro-dots { display: flex; gap: 8px; margin-top: 5px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; background: #444; transition: background 0.1s; }
+        .dot.active { background: var(--accent-color); }
+        
+        #timeline-container {
+            width: 100%; height: 150px; background: #000; border-radius: 8px;
+            border: 1px solid #555; position: relative; overflow: hidden;
+        }
+        
+        .drum-kit {
+            display: flex; justify-content: center; gap: 15px; margin: 20px 0; flex-wrap: wrap;
+        }
+        .drum {
+            display: flex; flex-direction: column; align-items: center;
+            cursor: pointer;
+        }
+        .drum > img {
+            width: 100px; height: 100px; border-radius: 50%; 
+            background: #333; border: 3px solid #555;
+            object-fit: contain;
+            transition: transform 0.05s, box-shadow 0.05s;
+        }
+        .drum.hit img {
+            transform: scale(1.15);
+            box-shadow: 0 0 15px 5px var(--accent-color);
+            filter: brightness(1.5);
+        }
+        .drum-label {
+            margin-top: 6px;
+            font-size: 0.85rem;
+            color: #ccc;
+        }
+
+        .controls { 
+            background: var(--color-panel); padding: 20px; border-radius: 12px; 
+            max-width: 800px; margin: 0 auto; 
+            display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+        }
+        .control-row { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; }
+        .controls button { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; }
+        #btnPlay { background: var(--accent-color); color: black; font-weight: bold; }
+        #btnStop { background: #555; color: white; }
+        
+        input[type="range"] {
+            flex-grow: 1;
+            -webkit-appearance: none;
+            height: 8px;
+            background: #555;
+            border-radius: 5px;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+        }
+
+        #seekSlider {
+            background: linear-gradient(to right, var(--accent-color) 0%, var(--accent-color) 0%, #555 0%, #555 100%);
+            background-size: 0% 100%;
+            background-repeat: no-repeat;
+        }
+
+        #status {
+            display: block;
+            margin-top: 10px;
+            font-size: 0.95rem;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading-overlay">
+        <p>Cargando...</p>
+        <div class="spinner"></div>
+    </div>
+    
+    <div id="main-content" style="opacity: 0;"> 
+        <h2>🥁 Percusión - El Cóndor Pasa</h2>
+        <span id="status">Cargando guía MIDI...</span>
+
+        <div class="main-grid">
+            <div id="timeline-container">
+                <canvas id="rhythmCanvas"></canvas>
+            </div>
+
+            <div class="metro-panel">
+                <div class="metro-label">COMPÁS <span id="bar-display">1</span></div>
+                <div id="beat-display" class="metro-big-number">1</div>
+                <div class="metro-dots" id="metro-dots-container"></div>
+            </div>
+        </div>
+
+        <div class="drum-kit">
+            <div class="drum" id="vis-kick">
+                <img src="images/kick_img.png" alt="Bombo">
+                <div class="drum-label">Bombo</div>
+            </div>
+            <div class="drum" id="vis-tar">
+                <img src="images/tar_img.png" alt="Tarola">
+                <div class="drum-label">Tarola</div>
+            </div>
+            <div class="drum" id="vis-crash">
+                <img src="images/crash_img.png" alt="Platillo">
+                <div class="drum-label">Platillo</div>
+            </div>
+            <div class="drum" id="vis-ton">
+                <img src="images/ton_img.png" alt="Tambor">
+                <div class="drum-label">Tambor</div>
+            </div>
+            <div class="drum" id="vis-nap">
+                <img src="images/nap_img.png" alt="Napoleón">
+                <div class="drum-label">Napoleón</div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-row">
+                <span style="font-size:12px;">Navegar</span>
+                <input type="range" id="seekSlider" min="0" max="100" value="0" step="0.1">
+            </div>
+            <div class="control-row" style="grid-column: span 1;">
+                <button id="btnPlay">▶ REPRODUCIR</button>
+                <button id="btnStop">⏹ DETENER</button>
+            </div>
+            <div class="control-row">
+                <label>Tempo: <span id="bpmVal">120</span></label>
+                <input type="range" id="bpmSlider" min="40" max="200" value="120">
+            </div>
+            <div class="control-row">
+                <label>Volumen Melodía</label>
+                <input type="range" id="volMelody" min="-30" max="10" value="0">
+            </div>
+            <!-- Volumen general de percusión -->
+            <div class="control-row">
+                <label>Volumen Percusión</label>
+                <input type="range" id="volPercussion" min="-30" max="10" value="0">
+            </div>
+            <!-- Volúmenes individuales -->
+            <div class="control-row">
+                <label>Volumen Bombo</label>
+                <input type="range" id="vol-kick" min="-30" max="10" value="0">
+            </div>
+            <div class="control-row">
+                <label>Volumen Tarola</label>
+                <input type="range" id="vol-tar" min="-30" max="10" value="0">
+            </div>
+            <div class="control-row">
+                <label>Volumen Platillo</label>
+                <input type="range" id="vol-crash" min="-30" max="10" value="0">
+            </div>
+            <div class="control-row">
+                <label>Volumen Tambor</label>
+                <input type="range" id="vol-ton" min="-30" max="10" value="0">
+            </div>
+            <div class="control-row">
+                <label>Volumen Napoleón</label>
+                <input type="range" id="vol-nap" min="-30" max="10" value="0">
+            </div>
+            
+        </div>
+    </div>
+    
+    <script>
+        let currentMidi = null;
+        let instrumentoSeleccionado = null;
+        let originalBpm = 120;
+        let midiNotesInBeats = [];
+        let notesToDraw = [];
+        let beatLoopId = null;
+        let isSeeking = false;
+
+        // Ganancia maestra
+        const gainPercussion = new Tone.Gain(1).toDestination();
+        const gainMelody = new Tone.Gain(1).toDestination();
+
+        // Ganancias individuales
+        const individualGains = {
+            'vis-kick': new Tone.Gain(1),
+            'vis-tar': new Tone.Gain(1),
+            'vis-crash': new Tone.Gain(1),
+            'vis-ton': new Tone.Gain(1),
+            'vis-nap': new Tone.Gain(1)
+        };
+
+        // Conectar: sampler → gain individual → gain general → destino
+        const samplers = {
+            'vis-kick': new Tone.Sampler({ urls: { "C2": "sounds/kick.mp3" } }).connect(individualGains['vis-kick']),
+            'vis-tar': new Tone.Sampler({ urls: { "D2": "sounds/tar.mp3" } }).connect(individualGains['vis-tar']),
+            'vis-crash': new Tone.Sampler({ urls: { "C#3": "sounds/crash.mp3" } }).connect(individualGains['vis-crash']),
+            'vis-ton': new Tone.Sampler({ urls: { "G2": "sounds/ton.mp3" } }).connect(individualGains['vis-ton']),
+            'vis-nap': new Tone.Sampler({ urls: { "A2": "sounds/nap.mp3" } }).connect(individualGains['vis-nap'])
+        };
+
+        // Conectar ganancias individuales al grupo
+        Object.values(individualGains).forEach(g => g.connect(gainPercussion));
+
+        // Sintetizador armónico para melodía
+        const otrosSynth = new Tone.PolySynth({
+            maxPolyphony: 64,
+            voice: Tone.Synth,
+            options: {
+                oscillator: { type: "sawtooth" },
+                filter: { type: "lowpass", frequency: 2000, rolloff: -12 },
+                envelope: { attack: 0.02, decay: 0.25, sustain: 0.7, release: 1.0 }
+            }
+        }).connect(gainMelody);
+
+        const drumMap = {
+            36: { id: 'vis-kick', samplerNote: 'C2', color: '#ff4d4d', y: 0.9 }, 
+            35: { id: 'vis-kick', samplerNote: 'C2', color: '#ff4d4d', y: 0.9 }, 
+            38: { id: 'vis-tar', samplerNote: 'D2', color: '#4dff4d', y: 0.5 },  
+            40: { id: 'vis-tar', samplerNote: 'D2', color: '#4dff4d', y: 0.5 },  
+            49: { id: 'vis-crash', samplerNote: 'C#3', color: '#ffd700', y: 0.1 }, 
+            57: { id: 'vis-crash', samplerNote: 'C#3', color: '#ffd700', y: 0.1 }, 
+            43: { id: 'vis-ton', samplerNote: 'G2', color: '#4d4dff', y: 0.7 },   
+            41: { id: 'vis-ton', samplerNote: 'G2', color: '#4d4dff', y: 0.7 },   
+            45: { id: 'vis-nap', samplerNote: 'A2', color: '#4d4dff', y: 0.3 },   
+            47: { id: 'vis-nap', samplerNote: 'A2', color: '#4d4dff', y: 0.3 },   
+            48: { id: 'vis-nap', samplerNote: 'A2', color: '#4d4dff', y: 0.3 }    
+        };
+
+        const statusElement = document.getElementById('status');
+        const canvas = document.getElementById('rhythmCanvas');
+        const ctx = canvas.getContext('2d');
+        const btnPlay = document.getElementById('btnPlay');
+        const seekSlider = document.getElementById('seekSlider');
+        const bpmSlider = document.getElementById('bpmSlider');
+        const bpmVal = document.getElementById('bpmVal');
+        const volPercussionSlider = document.getElementById('volPercussion');
+        const volMelodySlider = document.getElementById('volMelody');
+
+        // Asociar sliders individuales
+        const volSliders = {
+            'vis-kick': document.getElementById('vol-kick'),
+            'vis-tar': document.getElementById('vol-tar'),
+            'vis-crash': document.getElementById('vol-crash'),
+            'vis-ton': document.getElementById('vol-ton'),
+            'vis-nap': document.getElementById('vol-nap')
+        };
+
+        function updateSeekProgress(percent) {
+            seekSlider.style.backgroundSize = `${percent}% 100%`;
+        }
+
+        function stopAll() {
+            Tone.Transport.stop();
+            Tone.Transport.cancel();
+            if (beatLoopId) {
+                Tone.Transport.clear(beatLoopId);
+                beatLoopId = null;
+            }
+            document.getElementById('bar-display').innerText = "1";
+            document.getElementById('beat-display').innerText = "1";
+            btnPlay.innerText = "▶ REPRODUCIR";
+            document.querySelectorAll('.drum').forEach(d => d.classList.remove('hit'));
+            document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
+            seekSlider.value = 0;
+            updateSeekProgress(0);
+        }
+
+        function generarPuntosMetronomo(cantidad) {
+            const container = document.getElementById('metro-dots-container');
+            container.innerHTML = '';
+            for(let i = 0; i < cantidad; i++) {
+                const d = document.createElement('div');
+                d.className = 'dot';
+                container.appendChild(d);
+            }
+        }
+
+        function actualizarMetronomoVisual() {
+            const [bar, beat] = Tone.Transport.position.split(':').map(Number);
+            document.getElementById('bar-display').innerText = bar + 1;
+            document.getElementById('beat-display').innerText = beat + 1;
+            document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === beat));
+        }
+
+        function resizeCanvas() {
+            const c = document.getElementById('timeline-container');
+            canvas.width = c.offsetWidth;
+            canvas.height = c.offsetHeight;
+        }
+
+        function drawLoop() {
+            requestAnimationFrame(drawLoop);
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.strokeStyle = "#222";
+            for(let i = 1; i < 5; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, canvas.height * i / 5);
+                ctx.lineTo(canvas.width, canvas.height * i / 5);
+                ctx.stroke();
+            }
+
+            if (!currentMidi) return;
+
+            if (Tone.Transport.state !== 'stopped') {
+                statusElement.innerText = `Reproduciendo... | BPM: ${Math.round(Tone.Transport.bpm.value)}`;
+            }
+
+            const secInScreen = 3;
+            const pxPerSec = canvas.width / secInScreen;
+            const now = Tone.Transport.seconds;
+            const playX = canvas.width * 0.2;
+
+            const notasAMostrar = instrumentoSeleccionado
+                ? notesToDraw.filter(n => n.id === instrumentoSeleccionado)
+                : [];
+
+            let notaActiva = null;
+            const tolerance = 0.08;
+            for (const n of notasAMostrar) {
+                if (Math.abs(n.time - now) < tolerance) {
+                    notaActiva = n;
+                    break;
+                }
+            }
+
+            notasAMostrar.forEach(n => {
+                const x = playX + (n.time - now) * pxPerSec;
+                if (x > -20 && x < canvas.width + 20) {
+                    ctx.fillStyle = n.color;
+                    const y = n.yRel * (canvas.height - 20);
+                    ctx.beginPath();
+                    if (ctx.roundRect) ctx.roundRect(x, y, 15, 15, 4);
+                    else ctx.rect(x, y, 15, 15);
+                    ctx.fill();
+                }
+            });
+
+            if (notaActiva) {
+                const x = playX + (notaActiva.time - now) * pxPerSec;
+                const y = notaActiva.yRel * (canvas.height - 20);
+                if (x > -20 && x < canvas.width + 20) {
+                    ctx.beginPath();
+                    ctx.arc(x + 7.5, y + 7.5, 12, 0, Math.PI * 2);
+                    ctx.strokeStyle = "white";
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.shadowColor = "white";
+                    ctx.shadowBlur = 10;
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            if (currentMidi && Tone.Transport.state === 'started' && !isSeeking) {
+                const progress = (Tone.Transport.seconds / currentMidi.duration) * 100;
+                seekSlider.value = Math.min(progress, 100);
+                updateSeekProgress(seekSlider.value);
+            }
+        }
+
+        function programarTodo() {
+            const currentBpm = Tone.Transport.bpm.value;
+            midiNotesInBeats.forEach(entry => {
+                const currentTime = entry.beatTime * (60 / currentBpm);
+                if (entry.tipo === 'perc') {
+                    Tone.Transport.schedule((time) => {
+                        samplers[entry.id].triggerAttack(drumMap[entry.midi].samplerNote, time);
+                        Tone.Draw.schedule(() => {
+                            document.getElementById(entry.id).classList.add('hit');
+                            setTimeout(() => document.getElementById(entry.id).classList.remove('hit'), 100);
+                        }, time);
+                    }, currentTime);
+                } else {
+                    const dur = entry.duration > 0.01 ? entry.duration : 0.1;
+                    Tone.Transport.schedule((time) => {
+                        otrosSynth.triggerAttackRelease(entry.name, dur, time);
+                    }, currentTime);
+                }
+            });
+        }
+
+        async function cargarMidiFijo() {
+            try {
+                const response = await fetch("mid/condor_pasa.mid");
+                if (!response.ok) throw new Error("Archivo no encontrado");
+                const arrayBuffer = await response.arrayBuffer();
+                currentMidi = new Midi(arrayBuffer);
+
+                originalBpm = currentMidi.header.tempos.length > 0 ? currentMidi.header.tempos[0].bpm : 120;
+                Tone.Transport.bpm.value = originalBpm;
+                bpmSlider.value = originalBpm;
+                bpmVal.innerText = Math.round(originalBpm);
+
+                let timeSig = [4, 4];
+                if (currentMidi.header.timeSignatures.length > 0) {
+                    timeSig = currentMidi.header.timeSignatures[0].timeSignature;
+                }
+                Tone.Transport.timeSignature = timeSig;
+                generarPuntosMetronomo(timeSig[0]);
+
+                midiNotesInBeats = [];
+                notesToDraw = [];
+                let notasPerc = 0, notasMel = 0;
+
+                currentMidi.tracks.forEach(track => {
+                    track.notes.forEach(note => {
+                        if (track.channel === 9) {
+                            const info = drumMap[note.midi];
+                            if (info) {
+                                const beatTime = note.time * (originalBpm / 60);
+                                midiNotesInBeats.push({ ...note, beatTime, tipo: 'perc', id: info.id });
+                                notesToDraw.push({ time: note.time, yRel: info.y, color: info.color, id: info.id });
+                                notasPerc++;
+                            }
+                        } else {
+                            const beatTime = note.time * (originalBpm / 60);
+                            midiNotesInBeats.push({ 
+                                ...note, 
+                                beatTime, 
+                                tipo: 'otro', 
+                                name: note.name,
+                                duration: note.duration
+                            });
+                            notasMel++;
+                        }
+                    });
+                });
+
+                console.log(`Notas cargadas: Percusión=${notasPerc}, Melodía=${notasMel}`);
+                statusElement.innerText = "Haz clic en un instrumento para enfocar.";
+                document.getElementById('loading-overlay').style.display = 'none';
+                document.getElementById('main-content').style.opacity = '1';
+            } catch (e) {
+                console.error("Error al cargar MIDI:", e);
+                statusElement.innerText = "Error al cargar el archivo MIDI.";
+                document.getElementById('loading-overlay').style.display = 'none';
+            }
+        }
+
+        window.addEventListener('load', () => {
+            resizeCanvas();
+            drawLoop();
+            cargarMidiFijo();
+        });
+
+        document.querySelectorAll('.drum').forEach(el => {
+            el.addEventListener('click', () => {
+                instrumentoSeleccionado = el.id;
+                statusElement.innerText = `Enfocado en: ${el.querySelector('.drum-label').textContent}`;
+            });
+        });
+
+        document.getElementById('btnStop').onclick = stopAll;
+
+        btnPlay.onclick = async () => {
+            if (Tone.context.state !== 'running') {
+                await Tone.start();
+            }
+
+            if (Tone.Transport.state === 'started') {
+                Tone.Transport.pause();
+                btnPlay.innerText = "▶ CONTINUAR";
+            } else {
+                Tone.Transport.cancel();
+                beatLoopId = Tone.Transport.scheduleRepeat((time) => {
+                    Tone.Draw.schedule(actualizarMetronomoVisual, time);
+                }, "4n");
+                programarTodo();
+                Tone.Transport.start();
+                btnPlay.innerText = "⏸ PAUSA";
+            }
+        };
+
+        const onSeekEnd = () => {
+            if (currentMidi) {
+                const newTime = (seekSlider.value / 100) * currentMidi.duration;
+                Tone.Transport.seconds = newTime;
+            }
+            isSeeking = false;
+        };
+
+        seekSlider.addEventListener('mousedown', () => isSeeking = true);
+        seekSlider.addEventListener('touchstart', () => isSeeking = true);
+        seekSlider.addEventListener('mouseup', onSeekEnd);
+        seekSlider.addEventListener('touchend', onSeekEnd);
+        seekSlider.addEventListener('change', onSeekEnd);
+        seekSlider.addEventListener('input', () => {
+            isSeeking = true;
+            updateSeekProgress(seekSlider.value);
+        });
+
+        bpmSlider.addEventListener('input', (e) => {
+            Tone.Transport.bpm.value = e.target.value;
+            bpmVal.innerText = Math.round(e.target.value);
+        });
+        bpmSlider.addEventListener('change', () => {
+            if (Tone.Transport.state === 'started' && currentMidi) {
+                Tone.Transport.stop();
+                Tone.Transport.seconds = 0;
+                Tone.Transport.cancel();
+                programarTodo();
+                beatLoopId = Tone.Transport.scheduleRepeat((time) => {
+                    Tone.Draw.schedule(actualizarMetronomoVisual, time);
+                }, "4n");
+                Tone.Transport.start();
+            }
+        });
+
+        // --- Controles de volumen ---
+        volPercussionSlider.addEventListener('input', (e) => {
+            gainPercussion.gain.value = Tone.dbToGain(parseFloat(e.target.value));
+        });
+
+        volMelodySlider.addEventListener('input', (e) => {
+            gainMelody.gain.value = Tone.dbToGain(parseFloat(e.target.value));
+        });
+
+        // Sliders individuales
+        Object.keys(volSliders).forEach(id => {
+            volSliders[id].addEventListener('input', (e) => {
+                individualGains[id].gain.value = Tone.dbToGain(parseFloat(e.target.value));
+            });
+        });
+
+        window.addEventListener('resize', resizeCanvas);
+    </script>
+</body>
+</html>
